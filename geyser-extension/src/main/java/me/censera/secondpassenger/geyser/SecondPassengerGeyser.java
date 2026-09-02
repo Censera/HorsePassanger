@@ -21,22 +21,34 @@ public final class SecondPassengerGeyser implements Extension {
     }
 
     private void apply(GeyserEntity vehicle) {
-        if (!isHorse(vehicle) || vehicle.passengers().size() != 2) {
+        if (!isHorse(vehicle)) {
             return;
         }
 
-        for (int i = 0; i < vehicle.passengers().size(); i++) {
-            GeyserEntity passenger = vehicle.passengers().get(i);
-            float x = i == 0 ? -SEAT_OFFSET : SEAT_OFFSET;
-            passenger.override(GeyserEntityDataTypes.SEAT_OFFSET, Vector3f.from(x, 0.0F, 0.0F));
+        var passengers = vehicle.passengers();
+        for (int i = 0; i < passengers.size(); i++) {
+            GeyserEntity passenger = passengers.get(i);
+            if (passengers.size() == 2) {
+                float x = i == 0 ? -SEAT_OFFSET : SEAT_OFFSET;
+                passenger.override(
+                        GeyserEntityDataTypes.SEAT_OFFSET,
+                        Vector3f.from(x, 0.0F, 0.0F)
+                );
+            } else {
+                passenger.override(GeyserEntityDataTypes.SEAT_OFFSET, null);
+            }
         }
     }
 
     private static boolean isHorse(GeyserEntity entity) {
-        String type = entity.definition().identifier().toString();
-        return type.equals("minecraft:horse")
-                || type.equals("minecraft:skeleton_horse")
-                || type.equals("minecraft:donkey")
-                || type.equals("minecraft:mule");
+        var identifier = entity.definition().identifier();
+        if (!identifier.namespace().equals("minecraft")) {
+            return false;
+        }
+
+        return identifier.path().equals("horse")
+                || identifier.path().equals("skeleton_horse")
+                || identifier.path().equals("donkey")
+                || identifier.path().equals("mule");
     }
 }
