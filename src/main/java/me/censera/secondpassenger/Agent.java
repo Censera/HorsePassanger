@@ -16,6 +16,7 @@ import static net.bytebuddy.matcher.ElementMatchers.named;
 import static net.bytebuddy.matcher.ElementMatchers.takesArguments;
 
 public final class Agent {
+    // Keep the bootstrap JAR open for the lifetime of the JVM.
     private static JarFile bootstrapJar;
 
     private Agent() {
