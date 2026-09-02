@@ -116,7 +116,7 @@ final class PassengerLogic {
 
         private Object offset(Object vehicle, Object position, double xOffset) {
             try {
-                double yaw = Math.toRadians(-((float) getYRot.invokeExact(vehicle)));
+                double yaw = Math.toRadians((float) getYRot.invokeExact(vehicle));
                 double sin = Math.sin(yaw);
                 double cos = Math.cos(yaw);
 
@@ -125,7 +125,7 @@ final class PassengerLogic {
                 double z = (double) vecZ.invokeExact(position);
 
                 double rotatedX = xOffset * cos;
-                double rotatedZ = -xOffset * sin;
+                double rotatedZ = xOffset * sin;
 
                 return vecConstructor.invokeExact(x + rotatedX, y, z + rotatedZ);
             } catch (Throwable e) {
