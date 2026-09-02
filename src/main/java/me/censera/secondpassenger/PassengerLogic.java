@@ -3,6 +3,7 @@ package me.censera.secondpassenger;
 import java.lang.invoke.MethodHandle;
 import java.lang.invoke.MethodHandles;
 import java.lang.invoke.MethodType;
+import java.lang.reflect.Method;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -23,7 +24,6 @@ public final class PassengerLogic {
 
     private static final Map<Class<?>, MethodHandle[]> ACCESS = new HashMap<>();
     private static final Map<Class<?>, MethodHandle[]> PASSENGER_ACCESS = new HashMap<>();
-    private static final Map<Class<?>, MethodHandle[]> OWNERSHIP_ACCESS = new HashMap<>();
     private static final Map<Class<?>, Boolean> HORSE_LIKE = new HashMap<>();
     private static final Map<Object, Map<UUID, Integer>> SEATS = new WeakHashMap<>();
 
@@ -102,17 +102,19 @@ public final class PassengerLogic {
 
     private static boolean canRideSecondPassenger(Object vehicle, Object player) {
         try {
-            MethodHandle[] ownership = ownershipAccess(vehicle.getClass());
-            boolean tamed = (boolean) ownership[0].invokeExact(vehicle);
-
-            if (!tamed) {
+            Object bukkitHorse = vehicle.getClass().getMethod("getBukkitEntity").invoke(vehicle);
+            Method isTamed = bukkitHorse.getClass().getMethod("isTamed");
+            if (!(boolean) isTamed.invoke(bukkitHorse)) {
                 return true;
             }
 
-            UUID owner = (UUID) ownership[1].invokeExact(vehicle);
-            UUID playerId = (UUID) passengerAccess(player.getClass())[5].invokeExact(player);
+            UUID owner = (UUID) bukkitHorse.getClass().getMethod("getOwnerUniqueId").invoke(bukkitHorse);
+            UUID playerId = (UUID) player.getClass().getMethod("getBukkitEntity").invoke(player)
+                    .getClass().getMethod("getUniqueId").invoke(
+                            player.getClass().getMethod("getBukkitEntity").invoke(player)
+                    );
             return owner != null && owner.equals(playerId);
-        } catch (Throwable e) {
+        } catch (ReflectiveOperationException e) {
             throw new IllegalStateException("Failed to check horse ownership for " + vehicle.getClass().getName(), e);
         }
     }
@@ -304,17 +306,6 @@ public final class PassengerLogic {
         return result;
     }
 
-    private static MethodHandle[] ownershipAccess(Class<?> vehicleClass) {
-        MethodHandle[] cached = OWNERSHIP_ACCESS.get(vehicleClass);
-        if (cached != null) {
-            return cached;
-        }
-
-        MethodHandle[] result = createOwnershipAccess(vehicleClass);
-        OWNERSHIP_ACCESS.put(vehicleClass, result);
-        return result;
-    }
-
     private static MethodHandle[] createAccess(Class<?> vehicleClass) {
         try {
             MethodHandles.Lookup lookup = MethodHandles.publicLookup();
@@ -327,21 +318,6 @@ public final class PassengerLogic {
             return new MethodHandle[]{getPassengers, getYRot};
         } catch (ReflectiveOperationException e) {
             throw new IllegalStateException("Failed to initialize vehicle access for " + vehicleClass.getName(), e);
-        }
-    }
-
-    private static MethodHandle[] createOwnershipAccess(Class<?> vehicleClass) {
-        try {
-            MethodHandles.Lookup lookup = MethodHandles.publicLookup();
-            MethodHandle isTamed = lookup.findVirtual(
-                    vehicleClass, "isTamed", MethodType.methodType(boolean.class)
-            ).asType(MethodType.methodType(boolean.class, Object.class));
-            MethodHandle getOwnerUuid = lookup.findVirtual(
-                    vehicleClass, "getOwnerUuid", MethodType.methodType(UUID.class)
-            ).asType(MethodType.methodType(UUID.class, Object.class));
-            return new MethodHandle[]{isTamed, getOwnerUuid};
-        } catch (ReflectiveOperationException e) {
-            throw new IllegalStateException("Failed to initialize horse ownership access for " + vehicleClass.getName(), e);
         }
     }
 
