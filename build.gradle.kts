@@ -18,11 +18,11 @@ dependencies {
 }
 
 java {
-    toolchain.languageVersion = JavaLanguageVersion.of(26)
+    toolchain.languageVersion = JavaLanguageVersion.of(25)
 }
 
 tasks.withType<JavaCompile>().configureEach {
-    options.release = 26
+    options.release = 25
 }
 
 tasks.jar {
