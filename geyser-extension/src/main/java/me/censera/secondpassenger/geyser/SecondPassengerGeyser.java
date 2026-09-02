@@ -2,10 +2,10 @@ package me.censera.secondpassenger.geyser;
 
 import org.cloudburstmc.math.vector.Vector3f;
 import org.geysermc.event.subscribe.Subscribe;
+import org.geysermc.geyser.api.entity.data.GeyserEntityDataTypes;
 import org.geysermc.geyser.api.entity.type.GeyserEntity;
 import org.geysermc.geyser.api.event.java.ServerUpdateEntityPassengersEvent;
 import org.geysermc.geyser.api.extension.Extension;
-import org.geysermc.geyser.entity.type.Entity;
 
 public final class SecondPassengerGeyser implements Extension {
     private static final float SEAT_OFFSET = 0.6F;
@@ -17,13 +17,15 @@ public final class SecondPassengerGeyser implements Extension {
             return;
         }
 
+        GeyserEntity addedPassenger = event.addedPassenger();
         var passengers = vehicle.passengers();
-        if (passengers.size() != 1) {
-            return;
-        }
 
-        setOffset(passengers.get(0), -SEAT_OFFSET);
-        setOffset(event.addedPassenger(), SEAT_OFFSET);
+        if (passengers.contains(addedPassenger)) {
+            setOffset(addedPassenger, -SEAT_OFFSET);
+        } else if (passengers.size() == 1) {
+            setOffset(passengers.get(0), -SEAT_OFFSET);
+            setOffset(addedPassenger, SEAT_OFFSET);
+        }
     }
 
     @Subscribe
@@ -40,12 +42,10 @@ public final class SecondPassengerGeyser implements Extension {
     }
 
     private static void setOffset(GeyserEntity passenger, float x) {
-        if (!(passenger instanceof Entity entity)) {
-            return;
-        }
-
-        entity.setRiderSeatPosition(Vector3f.from(x, 0.0F, 0.0F));
-        entity.updateBedrockMetadata();
+        passenger.override(
+                GeyserEntityDataTypes.SEAT_OFFSET,
+                Vector3f.from(x, 0.0F, 0.0F)
+        );
     }
 
     private static boolean isHorse(GeyserEntity entity) {
