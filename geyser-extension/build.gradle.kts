@@ -11,7 +11,7 @@ repositories {
 }
 
 dependencies {
-    compileOnly("org.geysermc.geyser:api:2.11.0")
+    compileOnly("org.geysermc.geyser:api:2.11.0-SNAPSHOT")
 }
 
 java {
