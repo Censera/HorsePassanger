@@ -11,7 +11,7 @@ public final class PassengerLogic {
     private static final String PLAYER_CLASS = "net.minecraft.world.entity.player.Player";
     private static final String ENTITY_CLASS = "net.minecraft.world.entity.Entity";
     private static final String INTERACTION_RESULT_CLASS = "net.minecraft.world.InteractionResult";
-    private static final double SEAT_OFFSET = 0.4D;
+    private static final double SPACE_FACTOR = 0.75D;
 
     private static final ConcurrentHashMap<Class<?>, MethodHandle[]> ACCESS = new ConcurrentHashMap<>();
     private static final ConcurrentHashMap<Class<?>, MethodHandle[]> PASSENGER_ACCESS = new ConcurrentHashMap<>();
@@ -90,10 +90,21 @@ public final class PassengerLogic {
             return;
         }
 
-        double offset = index == 0 ? -SEAT_OFFSET : SEAT_OFFSET;
         try {
             MethodHandle[] passengerAccess = passengerAccess(passenger.getClass());
             Object position = passengerAccess[0].invokeExact(passenger);
+
+            double passengerWidth = (double) passengerAccess[2].invokeExact(passenger);
+            double otherPassengerWidth = passengerWidth;
+            if (passengers.size() > 1) {
+                Object otherPassenger = passengers.get(index == 0 ? 1 : 0);
+                MethodHandle[] otherAccess = passengerAccess(otherPassenger.getClass());
+                otherPassengerWidth = (double) otherAccess[2].invokeExact(otherPassenger);
+            }
+
+            double gap = ((passengerWidth + otherPassengerWidth) * 0.5D) * SPACE_FACTOR;
+            double centerDistance = (passengerWidth * 0.5D) + gap + (otherPassengerWidth * 0.5D);
+            double offset = index == 0 ? -centerDistance * 0.5D : centerDistance * 0.5D;
             Object shifted = offset(vehicle, position, offset);
 
             MethodHandle[] vehicleAccess = access(vehicle.getClass());
@@ -178,8 +189,11 @@ public final class PassengerLogic {
             MethodHandle setPos = lookup.findVirtual(
                     passengerClass, "setPos", MethodType.methodType(void.class, double.class, double.class, double.class)
             ).asType(MethodType.methodType(void.class, Object.class, double.class, double.class, double.class));
+            MethodHandle getWidth = lookup.findVirtual(
+                    passengerClass, "getBbWidth", MethodType.methodType(float.class)
+            ).asType(MethodType.methodType(double.class, Object.class));
 
-            return new MethodHandle[]{getPosition, setPos};
+            return new MethodHandle[]{getPosition, setPos, getWidth};
         } catch (ReflectiveOperationException e) {
             throw new IllegalStateException("Failed to initialize passenger access for " + passengerClass.getName(), e);
         }
