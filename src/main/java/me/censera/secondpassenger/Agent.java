@@ -35,12 +35,8 @@ public final class Agent {
                 .transform((builder, type, classLoader, module, protectionDomain) -> builder
                         .visit(Advice.to(PassengerInteractAdvice.class)
                                 .on(named("mobInteract").and(takesArguments(2))))
-                        .visit(Advice.to(PassengerAttachmentAdvice.class)
-                                .on(named("getPassengerAttachmentPoint").and(takesArguments(3)))))
-                .type(named("org.geysermc.geyser.entity.type.Entity"))
-                .transform((builder, type, classLoader, module, protectionDomain) -> builder
-                        .visit(Advice.to(GeyserSeatPositionAdvice.class)
-                                .on(named("setRiderSeatPosition").and(takesArguments(1)))))
+                        .visit(Advice.to(PositionRiderAdvice.class)
+                                .on(named("positionRider").and(takesArguments(2)))))
                 .installOn(instrumentation);
 
         System.setProperty("second-passenger.agent", "true");
@@ -104,26 +100,13 @@ public final class Agent {
         }
     }
 
-    public static class PassengerAttachmentAdvice {
+    public static class PositionRiderAdvice {
         @Advice.OnMethodExit
         static void onExit(
                 @Advice.This Object vehicle,
-                @Advice.Argument(0) Object passenger,
-                @Advice.Return(readOnly = false, typing = net.bytebuddy.implementation.bytecode.assign.Assigner.Typing.DYNAMIC)
-                Object original
+                @Advice.Argument(0) Object passenger
         ) {
-            original = PassengerLogic.passengerAttachmentPoint(vehicle, passenger, original);
-        }
-    }
-
-    public static class GeyserSeatPositionAdvice {
-        @Advice.OnMethodEnter
-        static void onEnter(
-                @Advice.This Object passenger,
-                @Advice.Argument(value = 0, readOnly = false, typing = net.bytebuddy.implementation.bytecode.assign.Assigner.Typing.DYNAMIC)
-                Object position
-        ) {
-            position = PassengerLogic.geyserSeatPosition(passenger, position);
+            PassengerLogic.positionRider(vehicle, passenger);
         }
     }
 }
