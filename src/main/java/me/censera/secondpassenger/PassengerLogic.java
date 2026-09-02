@@ -66,7 +66,7 @@ public final class PassengerLogic {
             Class<?> interactionResult = Class.forName(
                     INTERACTION_RESULT_CLASS, false, vehicle.getClass().getClassLoader()
             );
-            return lookup.findStaticGetter(interactionResult, "SUCCESS", interactionResult).invoke();
+            return lookup.findStaticGetter(interactionResult, "SUCCESS_SERVER", interactionResult).invoke();
         } catch (Throwable e) {
             throw new IllegalStateException("Failed to add a second passenger to " + vehicle.getClass().getName(), e);
         }
