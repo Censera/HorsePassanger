@@ -12,32 +12,40 @@ public final class SecondPassengerGeyser implements Extension {
 
     @Subscribe
     public void onMount(ServerUpdateEntityPassengersEvent.Mount event) {
-        apply(event.vehicle());
-    }
-
-    @Subscribe
-    public void onDismount(ServerUpdateEntityPassengersEvent.Dismount event) {
-        apply(event.vehicle());
-    }
-
-    private void apply(GeyserEntity vehicle) {
+        GeyserEntity vehicle = event.vehicle();
         if (!isHorse(vehicle)) {
             return;
         }
 
         var passengers = vehicle.passengers();
-        for (int i = 0; i < passengers.size(); i++) {
-            GeyserEntity passenger = passengers.get(i);
-            if (passengers.size() == 2) {
-                float x = i == 0 ? -SEAT_OFFSET : SEAT_OFFSET;
-                passenger.override(
-                        GeyserEntityDataTypes.SEAT_OFFSET,
-                        Vector3f.from(x, 0.0F, 0.0F)
-                );
-            } else {
-                passenger.override(GeyserEntityDataTypes.SEAT_OFFSET, null);
-            }
+        GeyserEntity addedPassenger = event.addedPassenger();
+
+        if (passengers.size() == 1) {
+            setOffset(passengers.get(0), -SEAT_OFFSET);
+            setOffset(addedPassenger, SEAT_OFFSET);
+        } else {
+            addedPassenger.override(GeyserEntityDataTypes.SEAT_OFFSET, null);
         }
+    }
+
+    @Subscribe
+    public void onDismount(ServerUpdateEntityPassengersEvent.Dismount event) {
+        GeyserEntity vehicle = event.vehicle();
+        if (!isHorse(vehicle)) {
+            return;
+        }
+
+        event.removedPassenger().override(GeyserEntityDataTypes.SEAT_OFFSET, null);
+        for (GeyserEntity passenger : vehicle.passengers()) {
+            passenger.override(GeyserEntityDataTypes.SEAT_OFFSET, null);
+        }
+    }
+
+    private static void setOffset(GeyserEntity passenger, float x) {
+        passenger.override(
+                GeyserEntityDataTypes.SEAT_OFFSET,
+                Vector3f.from(x, 0.0F, 0.0F)
+        );
     }
 
     private static boolean isHorse(GeyserEntity entity) {
