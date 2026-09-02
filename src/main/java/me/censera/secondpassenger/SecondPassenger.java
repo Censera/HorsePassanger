@@ -5,7 +5,7 @@ import org.bukkit.plugin.java.JavaPlugin;
 public final class SecondPassenger extends JavaPlugin {
     @Override
     public void onEnable() {
-        if (!Agent.isInstalled()) {
+        if (!Boolean.getBoolean("second-passenger.agent")) {
             getLogger().severe("Bytecode transformer is not installed. Start Paper with -javaagent:path/to/second-passenger.jar");
             getServer().getPluginManager().disablePlugin(this);
             return;
