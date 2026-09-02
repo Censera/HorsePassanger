@@ -3,28 +3,41 @@ package me.censera.secondpassenger;
 import java.lang.invoke.MethodHandle;
 import java.lang.invoke.MethodHandles;
 import java.lang.invoke.MethodType;
+import java.util.HashMap;
 import java.util.List;
-import java.util.concurrent.ConcurrentHashMap;
+import java.util.Map;
+import java.util.UUID;
+import java.util.WeakHashMap;
 
 public final class PassengerLogic {
     private static final String HORSE_CLASS = "net.minecraft.world.entity.animal.equine.AbstractHorse";
     private static final String PLAYER_CLASS = "net.minecraft.world.entity.player.Player";
     private static final String ENTITY_CLASS = "net.minecraft.world.entity.Entity";
+    private static final String INTERACTION_HAND_CLASS = "net.minecraft.world.InteractionHand";
+    private static final String ITEM_STACK_CLASS = "net.minecraft.world.item.ItemStack";
     private static final String INTERACTION_RESULT_CLASS = "net.minecraft.world.InteractionResult";
     private static final String INTERACTION_SUCCESS_CLASS = "net.minecraft.world.InteractionResult$Success";
 
     private static final double SPACE_FACTOR = 0.75D;
     private static final double MINIMUM_CENTER_DISTANCE = 1.2D;
 
-    private static final ConcurrentHashMap<Class<?>, MethodHandle[]> ACCESS = new ConcurrentHashMap<>();
-    private static final ConcurrentHashMap<Class<?>, MethodHandle[]> PASSENGER_ACCESS = new ConcurrentHashMap<>();
-    private static final ConcurrentHashMap<Class<?>, Boolean> HORSE_LIKE = new ConcurrentHashMap<>();
+    private static final Map<Class<?>, MethodHandle[]> ACCESS = new HashMap<>();
+    private static final Map<Class<?>, MethodHandle[]> PASSENGER_ACCESS = new HashMap<>();
+    private static final Map<Class<?>, Boolean> HORSE_LIKE = new HashMap<>();
+    private static final Map<Object, Map<UUID, Integer>> SEATS = new WeakHashMap<>();
 
     private PassengerLogic() {
     }
 
     public static boolean isHorseLike(Object vehicle) {
-        return HORSE_LIKE.computeIfAbsent(vehicle.getClass(), PassengerLogic::computeHorseLike);
+        Boolean cached = HORSE_LIKE.get(vehicle.getClass());
+        if (cached != null) {
+            return cached;
+        }
+
+        boolean result = computeHorseLike(vehicle.getClass());
+        HORSE_LIKE.put(vehicle.getClass(), result);
+        return result;
     }
 
     private static boolean computeHorseLike(Class<?> type) {
@@ -42,6 +55,14 @@ public final class PassengerLogic {
 
     public static Object additionalPassengerResult(Object vehicle, Object player, Object hand) {
         if (!isHorseLike(vehicle) || passengerCount(vehicle) != 1 || !isPlayer(player)) {
+            return null;
+        }
+
+        if (!isMainHand(hand) || !isEmptyHand(player, hand)) {
+            return null;
+        }
+
+        if (!canRideSecondPassenger(vehicle, player)) {
             return null;
         }
 
@@ -78,6 +99,48 @@ public final class PassengerLogic {
         }
     }
 
+    private static boolean canRideSecondPassenger(Object vehicle, Object player) {
+        try {
+            MethodHandle[] vehicleAccess = access(vehicle.getClass());
+            UUID owner = (UUID) vehicleAccess[2].invokeExact(vehicle);
+            boolean tamed = (boolean) vehicleAccess[3].invokeExact(vehicle);
+
+            if (!tamed) {
+                return true;
+            }
+
+            UUID playerId = (UUID) passengerAccess(player.getClass())[5].invokeExact(player);
+            return owner != null && owner.equals(playerId);
+        } catch (Throwable e) {
+            throw new IllegalStateException("Failed to check horse ownership for " + vehicle.getClass().getName(), e);
+        }
+    }
+
+    private static boolean isMainHand(Object hand) {
+        return hand instanceof Enum<?> value && "MAIN_HAND".equals(value.name());
+    }
+
+    private static boolean isEmptyHand(Object player, Object hand) {
+        try {
+            MethodHandles.Lookup lookup = MethodHandles.publicLookup();
+            ClassLoader loader = player.getClass().getClassLoader();
+            Class<?> interactionHand = Class.forName(INTERACTION_HAND_CLASS, false, loader);
+            MethodHandle getItemInHand = lookup.findVirtual(
+                    player.getClass(), "getItemInHand", MethodType.methodType(
+                            Class.forName(ITEM_STACK_CLASS, false, loader), interactionHand
+                    )
+            ).asType(MethodType.methodType(Object.class, Object.class, Object.class));
+            Object item = getItemInHand.invokeExact(player, hand);
+
+            MethodHandle isEmpty = lookup.findVirtual(
+                    item.getClass(), "isEmpty", MethodType.methodType(boolean.class)
+            ).asType(MethodType.methodType(boolean.class, Object.class));
+            return (boolean) isEmpty.invokeExact(item);
+        } catch (Throwable e) {
+            throw new IllegalStateException("Failed to inspect the player's held item", e);
+        }
+    }
+
     private static boolean isPlayer(Object value) {
         for (Class<?> current = value.getClass(); current != null; current = current.getSuperclass()) {
             if (PLAYER_CLASS.equals(current.getName())) {
@@ -98,16 +161,48 @@ public final class PassengerLogic {
         }
 
         List<Object> passengers = passengers(vehicle);
-        int index = passengers.indexOf(passenger);
-        if (index < 0 || index > 1 || passengers.size() != 2 || !isPlayer(passenger)) {
+        if (passengers.isEmpty()) {
+            return;
+        }
+
+        if (!isPlayer(passenger)) {
             return;
         }
 
         try {
+            UUID vehicleId = (UUID) access(vehicle.getClass())[4].invokeExact(vehicle);
+            UUID passengerId = (UUID) passengerAccess(passenger.getClass())[5].invokeExact(passenger);
+            Map<UUID, Integer> seats = SEATS.computeIfAbsent(vehicle, ignored -> new HashMap<>());
+
+            for (UUID id : List.copyOf(seats.keySet())) {
+                if (!containsPassengerId(passengers, id)) {
+                    seats.remove(id);
+                }
+            }
+
+            int seat = assignSeat(seats, passengers, passengerId);
+            if (passengers.size() != 2 || seat < 0) {
+                if (passengers.size() == 1) {
+                    return;
+                }
+                return;
+            }
+
             MethodHandle[] vehicleAccess = access(vehicle.getClass());
             MethodHandle[] passengerHandle = passengerAccess(passenger.getClass());
 
-            Object otherPassenger = passengers.get(index == 0 ? 1 : 0);
+            Object otherPassenger = null;
+            for (Object candidate : passengers) {
+                UUID candidateId = (UUID) passengerAccess(candidate.getClass())[5].invokeExact(candidate);
+                if (!candidateId.equals(passengerId)) {
+                    otherPassenger = candidate;
+                    break;
+                }
+            }
+            if (otherPassenger == null) {
+                return;
+            }
+
             double passengerWidth = (double) passengerHandle[4].invokeExact(passenger);
             double otherWidth = (double) passengerAccess(otherPassenger.getClass())[4].invokeExact(otherPassenger);
 
@@ -116,7 +211,7 @@ public final class PassengerLogic {
                     (passengerWidth * 0.5D) + gap + (otherWidth * 0.5D),
                     MINIMUM_CENTER_DISTANCE
             );
-            double offset = index == 0 ? -centerDistance * 0.5D : centerDistance * 0.5D;
+            double offset = seat == 0 ? -centerDistance * 0.5D : centerDistance * 0.5D;
 
             double yaw = Math.toRadians((float) vehicleAccess[1].invokeExact(vehicle));
             double sin = Math.sin(yaw);
@@ -137,6 +232,54 @@ public final class PassengerLogic {
         }
     }
 
+    private static boolean containsPassengerId(List<Object> passengers, UUID id) {
+        for (Object passenger : passengers) {
+            try {
+                UUID passengerId = (UUID) passengerAccess(passenger.getClass())[5].invokeExact(passenger);
+                if (id.equals(passengerId)) {
+                    return true;
+                }
+            } catch (Throwable e) {
+                throw new IllegalStateException("Failed to read passenger UUID", e);
+            }
+        }
+        return false;
+    }
+
+    private static int assignSeat(Map<UUID, Integer> seats, List<Object> passengers, UUID passengerId) {
+        Integer assigned = seats.get(passengerId);
+        if (assigned != null) {
+            return assigned;
+        }
+
+        boolean seat0 = false;
+        boolean seat1 = false;
+        for (Object passenger : passengers) {
+            try {
+                UUID id = (UUID) passengerAccess(passenger.getClass())[5].invokeExact(passenger);
+                Integer seat = seats.get(id);
+                if (seat != null && seat == 0) {
+                    seat0 = true;
+                } else if (seat != null && seat == 1) {
+                    seat1 = true;
+                }
+            } catch (Throwable e) {
+                throw new IllegalStateException("Failed to assign passenger seat", e);
+            }
+        }
+
+        if (!seat0) {
+            assigned = 0;
+        } else if (!seat1) {
+            assigned = 1;
+        } else {
+            return -1;
+        }
+
+        seats.put(passengerId, assigned);
+        return assigned;
+    }
+
     @SuppressWarnings("unchecked")
     private static List<Object> passengers(Object vehicle) {
         try {
@@ -147,11 +290,25 @@ public final class PassengerLogic {
     }
 
     private static MethodHandle[] access(Class<?> vehicleClass) {
-        return ACCESS.computeIfAbsent(vehicleClass, PassengerLogic::createAccess);
+        MethodHandle[] cached = ACCESS.get(vehicleClass);
+        if (cached != null) {
+            return cached;
+        }
+
+        MethodHandle[] result = createAccess(vehicleClass);
+        ACCESS.put(vehicleClass, result);
+        return result;
     }
 
     private static MethodHandle[] passengerAccess(Class<?> passengerClass) {
-        return PASSENGER_ACCESS.computeIfAbsent(passengerClass, PassengerLogic::createPassengerAccess);
+        MethodHandle[] cached = PASSENGER_ACCESS.get(passengerClass);
+        if (cached != null) {
+            return cached;
+        }
+
+        MethodHandle[] result = createPassengerAccess(passengerClass);
+        PASSENGER_ACCESS.put(passengerClass, result);
+        return result;
     }
 
     private static MethodHandle[] createAccess(Class<?> vehicleClass) {
@@ -163,7 +320,16 @@ public final class PassengerLogic {
             MethodHandle getYRot = lookup.findVirtual(
                     vehicleClass, "getYRot", MethodType.methodType(float.class)
             ).asType(MethodType.methodType(float.class, Object.class));
-            return new MethodHandle[]{getPassengers, getYRot};
+            MethodHandle getUUID = lookup.findVirtual(
+                    vehicleClass, "getUUID", MethodType.methodType(UUID.class)
+            ).asType(MethodType.methodType(UUID.class, Object.class));
+            MethodHandle isTamed = lookup.findVirtual(
+                    vehicleClass, "isTamed", MethodType.methodType(boolean.class)
+            ).asType(MethodType.methodType(boolean.class, Object.class));
+            MethodHandle getOwnerUUID = lookup.findVirtual(
+                    vehicleClass, "getOwnerUUID", MethodType.methodType(UUID.class)
+            ).asType(MethodType.methodType(UUID.class, Object.class));
+            return new MethodHandle[]{getPassengers, getYRot, getOwnerUUID, isTamed, getUUID};
         } catch (ReflectiveOperationException e) {
             throw new IllegalStateException("Failed to initialize vehicle access for " + vehicleClass.getName(), e);
         }
@@ -183,14 +349,17 @@ public final class PassengerLogic {
             MethodHandle getZ = lookup.findVirtual(
                     entity, "getZ", MethodType.methodType(double.class)
             ).asType(MethodType.methodType(double.class, Object.class));
-            MethodHandle getWidth = lookup.findVirtual(
-                    entity, "getBbWidth", MethodType.methodType(float.class)
-            ).asType(MethodType.methodType(double.class, Object.class));
             MethodHandle setPos = lookup.findVirtual(
                     entity, "setPos", MethodType.methodType(void.class, double.class, double.class, double.class)
             ).asType(MethodType.methodType(void.class, Object.class, double.class, double.class, double.class));
+            MethodHandle getWidth = lookup.findVirtual(
+                    entity, "getBbWidth", MethodType.methodType(float.class)
+            ).asType(MethodType.methodType(double.class, Object.class));
+            MethodHandle getUUID = lookup.findVirtual(
+                    entity, "getUUID", MethodType.methodType(UUID.class)
+            ).asType(MethodType.methodType(UUID.class, Object.class));
 
-            return new MethodHandle[]{getX, getY, getZ, setPos, getWidth};
+            return new MethodHandle[]{getX, getY, getZ, setPos, getWidth, getUUID};
         } catch (ReflectiveOperationException e) {
             throw new IllegalStateException("Failed to initialize passenger access for " + passengerClass.getName(), e);
         }
