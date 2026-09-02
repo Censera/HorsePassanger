@@ -99,11 +99,11 @@ public final class PassengerLogic {
 
         try {
             MethodHandle[] vehicleAccess = access(vehicle.getClass());
-            MethodHandle[] passengerAccess = passengerAccess(passenger.getClass());
+            MethodHandle[] passengerHandle = passengerAccess(passenger.getClass());
 
             Object otherPassenger = passengers.get(index == 0 ? 1 : 0);
-            double passengerWidth = (double) passengerAccess(passenger.getClass())[2].invokeExact(passenger);
-            double otherWidth = (double) passengerAccess(otherPassenger.getClass())[2].invokeExact(otherPassenger);
+            double passengerWidth = (double) passengerHandle[4].invokeExact(passenger);
+            double otherWidth = (double) passengerAccess(otherPassenger.getClass())[4].invokeExact(otherPassenger);
 
             double gap = ((passengerWidth + otherWidth) * 0.5D) * SPACE_FACTOR;
             double centerDistance = Math.max(
@@ -116,11 +116,11 @@ public final class PassengerLogic {
             double sin = Math.sin(yaw);
             double cos = Math.cos(yaw);
 
-            double x = (double) passengerAccess[0].invokeExact(passenger);
-            double y = (double) passengerAccess[1].invokeExact(passenger);
-            double z = (double) passengerAccess[2].invokeExact(passenger);
+            double x = (double) passengerHandle[0].invokeExact(passenger);
+            double y = (double) passengerHandle[1].invokeExact(passenger);
+            double z = (double) passengerHandle[2].invokeExact(passenger);
 
-            passengerAccess[3].invokeExact(
+            passengerHandle[3].invokeExact(
                     passenger,
                     x + offset * cos,
                     y,
