@@ -7,6 +7,7 @@ version = rootProject.version
 
 repositories {
     mavenCentral()
+    maven("https://repo.opencollab.dev/main/")
 }
 
 dependencies {
