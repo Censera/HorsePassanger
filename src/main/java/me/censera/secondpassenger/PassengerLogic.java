@@ -5,7 +5,7 @@ import java.lang.invoke.MethodHandles;
 import java.lang.invoke.MethodType;
 import java.util.List;
 
-final class PassengerLogic {
+public final class PassengerLogic {
     private static final String HORSE_CLASS = "net.minecraft.world.entity.animal.equine.AbstractHorse";
     private static final double SEAT_OFFSET = 0.4D;
 
@@ -32,15 +32,15 @@ final class PassengerLogic {
     private PassengerLogic() {
     }
 
-    static boolean isHorseLike(Object vehicle) {
+    public static boolean isHorseLike(Object vehicle) {
         return HORSE_LIKE.get(vehicle.getClass());
     }
 
-    static int passengerCount(Object vehicle) {
+    public static int passengerCount(Object vehicle) {
         return ACCESS.get(vehicle.getClass()).passengerCount(vehicle);
     }
 
-    static Object position(Object vehicle, Object passenger, Object position) {
+    public static Object position(Object vehicle, Object passenger, Object position) {
         if (!isHorseLike(vehicle) || position == null) {
             return position;
         }
