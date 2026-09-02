@@ -16,7 +16,6 @@ import static net.bytebuddy.matcher.ElementMatchers.named;
 import static net.bytebuddy.matcher.ElementMatchers.takesArguments;
 
 public final class Agent {
-    // Keep the bootstrap JAR open for the lifetime of the JVM.
     private static JarFile bootstrapJar;
 
     private Agent() {
@@ -38,6 +37,10 @@ public final class Agent {
                                 .on(named("mobInteract").and(takesArguments(2))))
                         .visit(Advice.to(PassengerAttachmentAdvice.class)
                                 .on(named("getPassengerAttachmentPoint").and(takesArguments(3)))))
+                .type(named("org.geysermc.geyser.entity.type.Entity"))
+                .transform((builder, type, classLoader, module, protectionDomain) -> builder
+                        .visit(Advice.to(GeyserSeatPositionAdvice.class)
+                                .on(named("setRiderSeatPosition").and(takesArguments(1)))))
                 .installOn(instrumentation);
 
         System.setProperty("second-passenger.agent", "true");
@@ -110,6 +113,17 @@ public final class Agent {
                 Object original
         ) {
             original = PassengerLogic.passengerAttachmentPoint(vehicle, passenger, original);
+        }
+    }
+
+    public static class GeyserSeatPositionAdvice {
+        @Advice.OnMethodEnter
+        static void onEnter(
+                @Advice.This Object passenger,
+                @Advice.Argument(value = 0, readOnly = false, typing = net.bytebuddy.implementation.bytecode.assign.Assigner.Typing.DYNAMIC)
+                Object position
+        ) {
+            position = PassengerLogic.geyserSeatPosition(passenger, position);
         }
     }
 }
