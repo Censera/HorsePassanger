@@ -3,7 +3,6 @@ package me.censera.secondpassenger;
 import java.lang.invoke.MethodHandle;
 import java.lang.invoke.MethodHandles;
 import java.lang.invoke.MethodType;
-import java.lang.reflect.Method;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -63,10 +62,6 @@ public final class PassengerLogic {
             return null;
         }
 
-        if (!canRideSecondPassenger(vehicle, player)) {
-            return null;
-        }
-
         try {
             MethodHandles.Lookup lookup = MethodHandles.publicLookup();
             MethodHandle secondaryUse = lookup.findVirtual(
@@ -97,27 +92,6 @@ public final class PassengerLogic {
                     .invoke();
         } catch (Throwable e) {
             throw new IllegalStateException("Failed to add a second passenger to " + vehicle.getClass().getName(), e);
-        }
-    }
-
-    private static boolean canRideSecondPassenger(Object vehicle, Object player) {
-        try {
-            Object bukkitHorse = vehicle.getClass().getMethod("getBukkitEntity").invoke(vehicle);
-            if (!(boolean) bukkitHorse.getClass().getMethod("isTamed").invoke(bukkitHorse)) {
-                return true;
-            }
-
-            Object owner = bukkitHorse.getClass().getMethod("getOwner").invoke(bukkitHorse);
-            if (owner == null) {
-                return false;
-            }
-
-            Object bukkitPlayer = player.getClass().getMethod("getBukkitEntity").invoke(player);
-            UUID ownerId = (UUID) owner.getClass().getMethod("getUniqueId").invoke(owner);
-            UUID playerId = (UUID) bukkitPlayer.getClass().getMethod("getUniqueId").invoke(bukkitPlayer);
-            return ownerId.equals(playerId);
-        } catch (ReflectiveOperationException e) {
-            throw new IllegalStateException("Failed to check horse ownership for " + vehicle.getClass().getName(), e);
         }
     }
 
