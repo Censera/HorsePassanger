@@ -11,12 +11,17 @@ public final class PassengerLogic {
     private static final double SEAT_OFFSET = 0.4D;
 
     private static final ConcurrentHashMap<Class<?>, MethodHandle[]> ACCESS = new ConcurrentHashMap<>();
+    private static final ConcurrentHashMap<Class<?>, Boolean> HORSE_LIKE = new ConcurrentHashMap<>();
 
     private PassengerLogic() {
     }
 
     public static boolean isHorseLike(Object vehicle) {
-        for (Class<?> current = vehicle.getClass(); current != null; current = current.getSuperclass()) {
+        return HORSE_LIKE.computeIfAbsent(vehicle.getClass(), PassengerLogic::computeHorseLike);
+    }
+
+    private static boolean computeHorseLike(Class<?> type) {
+        for (Class<?> current = type; current != null; current = current.getSuperclass()) {
             if (HORSE_CLASS.equals(current.getName())) {
                 return true;
             }
