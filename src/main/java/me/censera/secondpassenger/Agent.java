@@ -37,7 +37,7 @@ public final class Agent {
                         .visit(Advice.to(PassengerInteractAdvice.class)
                                 .on(named("mobInteract").and(takesArguments(2))))
                         .visit(Advice.to(PassengerPositionAdvice.class)
-                                .on(named("getPassengerAttachmentPoint").and(takesArguments(3)))))
+                                .on(named("positionRider").and(takesArguments(2)))))
                 .installOn(instrumentation);
 
         System.setProperty("second-passenger.agent", "true");
@@ -105,11 +105,9 @@ public final class Agent {
         @Advice.OnMethodExit
         static void onExit(
                 @Advice.This Object vehicle,
-                @Advice.Argument(0) Object passenger,
-                @Advice.Return(readOnly = false, typing = net.bytebuddy.implementation.bytecode.assign.Assigner.Typing.DYNAMIC)
-                Object position
+                @Advice.Argument(0) Object passenger
         ) {
-            position = PassengerLogic.position(vehicle, passenger, position);
+            PassengerLogic.positionRider(vehicle, passenger);
         }
     }
 }
