@@ -17,9 +17,9 @@ public final class PassengerLogic {
     private static final String ITEM_STACK_CLASS = "net.minecraft.world.item.ItemStack";
     private static final String INTERACTION_RESULT_CLASS = "net.minecraft.world.InteractionResult";
     private static final String INTERACTION_SUCCESS_CLASS = "net.minecraft.world.InteractionResult$Success";
+    private static final String VEC3_CLASS = "net.minecraft.world.phys.Vec3";
 
-    private static final double SPACE_FACTOR = 0.75D;
-    private static final double MINIMUM_CENTER_DISTANCE = 1.2D;
+    private static final double PASSENGER_OFFSET = 0.6D;
 
     private static final Map<Class<?>, MethodHandle[]> ACCESS = new HashMap<>();
     private static final Map<Class<?>, MethodHandle[]> PASSENGER_ACCESS = new HashMap<>();
@@ -129,18 +129,14 @@ public final class PassengerLogic {
         return false;
     }
 
-    public static void positionRider(Object vehicle, Object passenger) {
-        if (!isHorseLike(vehicle)) {
-            return;
-        }
-
-        List<Object> passengers = passengers(vehicle);
-        if (passengers.isEmpty() || !isPlayer(passenger)) {
-            return;
+    public static Object passengerAttachmentPoint(Object vehicle, Object passenger, Object original) {
+        if (!isHorseLike(vehicle) || passengerCount(vehicle) != 2 || !isPlayer(passenger)) {
+            return original;
         }
 
         try {
-            UUID passengerId = (UUID) passengerAccess(passenger.getClass())[5].invokeExact(passenger);
+            List<Object> passengers = passengers(vehicle);
+            UUID passengerId = (UUID) passengerAccess(passenger.getClass())[0].invokeExact(passenger);
             Map<UUID, Integer> seats = SEATS.computeIfAbsent(vehicle, ignored -> new HashMap<>());
 
             for (UUID id : List.copyOf(seats.keySet())) {
@@ -150,58 +146,40 @@ public final class PassengerLogic {
             }
 
             int seat = assignSeat(seats, passengers, passengerId);
-            if (passengers.size() != 2 || seat < 0) {
-                return;
+            if (seat < 0) {
+                return original;
             }
 
             MethodHandle[] vehicleAccess = access(vehicle.getClass());
-            MethodHandle[] passengerHandle = passengerAccess(passenger.getClass());
+            MethodHandles.Lookup lookup = MethodHandles.publicLookup();
+            ClassLoader loader = vehicle.getClass().getClassLoader();
+            Class<?> vec3 = Class.forName(VEC3_CLASS, false, loader);
 
-            Object otherPassenger = null;
-            for (Object candidate : passengers) {
-                UUID candidateId = (UUID) passengerAccess(candidate.getClass())[5].invokeExact(candidate);
-                if (!candidateId.equals(passengerId)) {
-                    otherPassenger = candidate;
-                    break;
-                }
-            }
-            if (otherPassenger == null) {
-                return;
-            }
-
-            double passengerWidth = (double) passengerHandle[4].invokeExact(passenger);
-            double otherWidth = (double) passengerAccess(otherPassenger.getClass())[4].invokeExact(otherPassenger);
-
-            double gap = ((passengerWidth + otherWidth) * 0.5D) * SPACE_FACTOR;
-            double centerDistance = Math.max(
-                    (passengerWidth * 0.5D) + gap + (otherWidth * 0.5D),
-                    MINIMUM_CENTER_DISTANCE
+            MethodHandle constructor = lookup.findConstructor(
+                    vec3, MethodType.methodType(void.class, double.class, double.class, double.class)
             );
-            double offset = seat == 0 ? -centerDistance * 0.5D : centerDistance * 0.5D;
-
-            double yaw = Math.toRadians((float) vehicleAccess[1].invokeExact(vehicle));
-            double sin = Math.sin(yaw);
-            double cos = Math.cos(yaw);
-
-            double x = (double) passengerHandle[0].invokeExact(passenger);
-            double y = (double) passengerHandle[1].invokeExact(passenger);
-            double z = (double) passengerHandle[2].invokeExact(passenger);
-
-            passengerHandle[3].invokeExact(
-                    passenger,
-                    x + offset * cos,
-                    y,
-                    z + offset * sin
+            MethodHandle yRot = lookup.findVirtual(
+                    vec3, "yRot", MethodType.methodType(vec3, float.class)
             );
+            MethodHandle add = lookup.findVirtual(
+                    vec3, "add", MethodType.methodType(vec3, vec3)
+            );
+
+            double offset = seat == 0 ? -PASSENGER_OFFSET : PASSENGER_OFFSET;
+            float yaw = (float) vehicleAccess[1].invokeExact(vehicle);
+            Object localOffset = constructor.invoke(offset, 0.0D, 0.0D);
+            Object rotatedOffset = yRot.invoke(localOffset, -yaw * (float) (Math.PI / 180.0));
+            return add.invoke(original, rotatedOffset);
         } catch (Throwable e) {
-            throw new IllegalStateException("Failed to position passenger on " + vehicle.getClass().getName(), e);
+            throw new IllegalStateException("Failed to calculate passenger attachment point for "
+                    + vehicle.getClass().getName(), e);
         }
     }
 
     private static boolean containsPassengerId(List<Object> passengers, UUID id) {
         for (Object passenger : passengers) {
             try {
-                UUID passengerId = (UUID) passengerAccess(passenger.getClass())[5].invokeExact(passenger);
+                UUID passengerId = (UUID) passengerAccess(passenger.getClass())[0].invokeExact(passenger);
                 if (id.equals(passengerId)) {
                     return true;
                 }
@@ -222,7 +200,7 @@ public final class PassengerLogic {
         boolean seat1 = false;
         for (Object passenger : passengers) {
             try {
-                UUID id = (UUID) passengerAccess(passenger.getClass())[5].invokeExact(passenger);
+                UUID id = (UUID) passengerAccess(passenger.getClass())[0].invokeExact(passenger);
                 Integer seat = seats.get(id);
                 if (seat != null && seat == 0) {
                     seat0 = true;
@@ -296,27 +274,10 @@ public final class PassengerLogic {
         try {
             MethodHandles.Lookup lookup = MethodHandles.publicLookup();
             Class<?> entity = Class.forName(ENTITY_CLASS, false, passengerClass.getClassLoader());
-
-            MethodHandle getX = lookup.findVirtual(
-                    entity, "getX", MethodType.methodType(double.class)
-            ).asType(MethodType.methodType(double.class, Object.class));
-            MethodHandle getY = lookup.findVirtual(
-                    entity, "getY", MethodType.methodType(double.class)
-            ).asType(MethodType.methodType(double.class, Object.class));
-            MethodHandle getZ = lookup.findVirtual(
-                    entity, "getZ", MethodType.methodType(double.class)
-            ).asType(MethodType.methodType(double.class, Object.class));
-            MethodHandle setPos = lookup.findVirtual(
-                    entity, "setPos", MethodType.methodType(void.class, double.class, double.class, double.class)
-            ).asType(MethodType.methodType(void.class, Object.class, double.class, double.class, double.class));
-            MethodHandle getWidth = lookup.findVirtual(
-                    entity, "getBbWidth", MethodType.methodType(float.class)
-            ).asType(MethodType.methodType(double.class, Object.class));
             MethodHandle getUUID = lookup.findVirtual(
                     entity, "getUUID", MethodType.methodType(UUID.class)
             ).asType(MethodType.methodType(UUID.class, Object.class));
-
-            return new MethodHandle[]{getX, getY, getZ, setPos, getWidth, getUUID};
+            return new MethodHandle[]{getUUID};
         } catch (ReflectiveOperationException e) {
             throw new IllegalStateException("Failed to initialize passenger access for " + passengerClass.getName(), e);
         }
