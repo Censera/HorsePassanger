@@ -8,6 +8,9 @@ import java.util.concurrent.ConcurrentHashMap;
 
 public final class PassengerLogic {
     private static final String HORSE_CLASS = "net.minecraft.world.entity.animal.equine.AbstractHorse";
+    private static final String PLAYER_CLASS = "net.minecraft.world.entity.player.Player";
+    private static final String ENTITY_CLASS = "net.minecraft.world.entity.Entity";
+    private static final String INTERACTION_RESULT_CLASS = "net.minecraft.world.InteractionResult";
     private static final double SEAT_OFFSET = 0.4D;
 
     private static final ConcurrentHashMap<Class<?>, MethodHandle[]> ACCESS = new ConcurrentHashMap<>();
@@ -32,6 +35,55 @@ public final class PassengerLogic {
 
     public static int passengerCount(Object vehicle) {
         return passengers(vehicle).size();
+    }
+
+    public static Object additionalPassengerResult(Object vehicle, Object player, Object hand) {
+        if (!isHorseLike(vehicle) || passengerCount(vehicle) != 1 || !isPlayer(player)) {
+            return null;
+        }
+
+        try {
+            MethodHandles.Lookup lookup = MethodHandles.publicLookup();
+            MethodHandle secondaryUse = lookup.findVirtual(
+                    player.getClass(),
+                    "isSecondaryUseActive",
+                    MethodType.methodType(boolean.class)
+            ).asType(MethodType.methodType(boolean.class, Object.class));
+
+            if ((boolean) secondaryUse.invokeExact(player)) {
+                return null;
+            }
+
+            Class<?> entity = Class.forName(ENTITY_CLASS, false, vehicle.getClass().getClassLoader());
+            MethodHandle startRiding = lookup.findVirtual(
+                    player.getClass(),
+                    "startRiding",
+                    MethodType.methodType(boolean.class, entity)
+            ).asType(MethodType.methodType(boolean.class, Object.class, Object.class));
+
+            if (!(boolean) startRiding.invokeExact(player, vehicle)) {
+                return null;
+            }
+
+            Class<?> interactionResult = Class.forName(
+                    INTERACTION_RESULT_CLASS,
+                    false,
+                    vehicle.getClass().getClassLoader()
+            );
+            return lookup.findStaticGetter(interactionResult, "SUCCESS", interactionResult).invoke();
+        } catch (Throwable e) {
+            throw new IllegalStateException("Failed to add a second passenger to " + vehicle.getClass().getName(), e);
+        }
+    }
+
+    private static boolean isPlayer(Object value) {
+        for (Class<?> current = value.getClass(); current != null; current = current.getSuperclass()) {
+            if (PLAYER_CLASS.equals(current.getName())) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     public static Object position(Object vehicle, Object passenger, Object position) {
