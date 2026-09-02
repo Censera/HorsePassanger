@@ -23,6 +23,7 @@ public final class PassengerLogic {
 
     private static final Map<Class<?>, MethodHandle[]> ACCESS = new HashMap<>();
     private static final Map<Class<?>, MethodHandle[]> PASSENGER_ACCESS = new HashMap<>();
+    private static final Map<Class<?>, MethodHandle[]> OWNERSHIP_ACCESS = new HashMap<>();
     private static final Map<Class<?>, Boolean> HORSE_LIKE = new HashMap<>();
     private static final Map<Object, Map<UUID, Integer>> SEATS = new WeakHashMap<>();
 
@@ -101,14 +102,14 @@ public final class PassengerLogic {
 
     private static boolean canRideSecondPassenger(Object vehicle, Object player) {
         try {
-            MethodHandle[] vehicleAccess = access(vehicle.getClass());
-            UUID owner = (UUID) vehicleAccess[2].invokeExact(vehicle);
-            boolean tamed = (boolean) vehicleAccess[3].invokeExact(vehicle);
+            MethodHandle[] ownership = ownershipAccess(vehicle.getClass());
+            boolean tamed = (boolean) ownership[0].invokeExact(vehicle);
 
             if (!tamed) {
                 return true;
             }
 
+            UUID owner = (UUID) ownership[1].invokeExact(vehicle);
             UUID playerId = (UUID) passengerAccess(player.getClass())[5].invokeExact(player);
             return owner != null && owner.equals(playerId);
         } catch (Throwable e) {
@@ -161,16 +162,11 @@ public final class PassengerLogic {
         }
 
         List<Object> passengers = passengers(vehicle);
-        if (passengers.isEmpty()) {
-            return;
-        }
-
-        if (!isPlayer(passenger)) {
+        if (passengers.isEmpty() || !isPlayer(passenger)) {
             return;
         }
 
         try {
-            UUID vehicleId = (UUID) access(vehicle.getClass())[4].invokeExact(vehicle);
             UUID passengerId = (UUID) passengerAccess(passenger.getClass())[5].invokeExact(passenger);
             Map<UUID, Integer> seats = SEATS.computeIfAbsent(vehicle, ignored -> new HashMap<>());
 
@@ -182,9 +178,6 @@ public final class PassengerLogic {
 
             int seat = assignSeat(seats, passengers, passengerId);
             if (passengers.size() != 2 || seat < 0) {
-                if (passengers.size() == 1) {
-                    return;
-                }
                 return;
             }
 
@@ -311,6 +304,17 @@ public final class PassengerLogic {
         return result;
     }
 
+    private static MethodHandle[] ownershipAccess(Class<?> vehicleClass) {
+        MethodHandle[] cached = OWNERSHIP_ACCESS.get(vehicleClass);
+        if (cached != null) {
+            return cached;
+        }
+
+        MethodHandle[] result = createOwnershipAccess(vehicleClass);
+        OWNERSHIP_ACCESS.put(vehicleClass, result);
+        return result;
+    }
+
     private static MethodHandle[] createAccess(Class<?> vehicleClass) {
         try {
             MethodHandles.Lookup lookup = MethodHandles.publicLookup();
@@ -320,18 +324,24 @@ public final class PassengerLogic {
             MethodHandle getYRot = lookup.findVirtual(
                     vehicleClass, "getYRot", MethodType.methodType(float.class)
             ).asType(MethodType.methodType(float.class, Object.class));
-            MethodHandle getUUID = lookup.findVirtual(
-                    vehicleClass, "getUUID", MethodType.methodType(UUID.class)
-            ).asType(MethodType.methodType(UUID.class, Object.class));
+            return new MethodHandle[]{getPassengers, getYRot};
+        } catch (ReflectiveOperationException e) {
+            throw new IllegalStateException("Failed to initialize vehicle access for " + vehicleClass.getName(), e);
+        }
+    }
+
+    private static MethodHandle[] createOwnershipAccess(Class<?> vehicleClass) {
+        try {
+            MethodHandles.Lookup lookup = MethodHandles.publicLookup();
             MethodHandle isTamed = lookup.findVirtual(
                     vehicleClass, "isTamed", MethodType.methodType(boolean.class)
             ).asType(MethodType.methodType(boolean.class, Object.class));
-            MethodHandle getOwnerUUID = lookup.findVirtual(
-                    vehicleClass, "getOwnerUUID", MethodType.methodType(UUID.class)
+            MethodHandle getOwnerUuid = lookup.findVirtual(
+                    vehicleClass, "getOwnerUuid", MethodType.methodType(UUID.class)
             ).asType(MethodType.methodType(UUID.class, Object.class));
-            return new MethodHandle[]{getPassengers, getYRot, getOwnerUUID, isTamed, getUUID};
+            return new MethodHandle[]{isTamed, getOwnerUuid};
         } catch (ReflectiveOperationException e) {
-            throw new IllegalStateException("Failed to initialize vehicle access for " + vehicleClass.getName(), e);
+            throw new IllegalStateException("Failed to initialize horse ownership access for " + vehicleClass.getName(), e);
         }
     }
 
