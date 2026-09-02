@@ -1,0 +1,5 @@
+name: second-passenger
+version: 0.1.0
+main: me.censera.secondpassenger.SecondPassenger
+api-version: '26.2'
+description: Give horse-like entities two boat-style passenger seats.
