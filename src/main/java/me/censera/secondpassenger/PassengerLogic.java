@@ -16,17 +16,24 @@ final class PassengerLogic {
         }
     };
 
+    private static final ClassValue<Boolean> HORSE_LIKE = new ClassValue<>() {
+        @Override
+        protected Boolean computeValue(Class<?> type) {
+            for (Class<?> current = type; current != null; current = current.getSuperclass()) {
+                if (HORSE_CLASS.equals(current.getName())) {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+    };
+
     private PassengerLogic() {
     }
 
     static boolean isHorseLike(Object vehicle) {
-        for (Class<?> type = vehicle.getClass(); type != null; type = type.getSuperclass()) {
-            if (HORSE_CLASS.equals(type.getName())) {
-                return true;
-            }
-        }
-
-        return false;
+        return HORSE_LIKE.get(vehicle.getClass());
     }
 
     static int passengerCount(Object vehicle) {
@@ -45,11 +52,12 @@ final class PassengerLogic {
         }
 
         double offset = index == 0 ? -SEAT_OFFSET : SEAT_OFFSET;
-        return access.offset(position, offset);
+        return access.offset(vehicle, position, offset);
     }
 
     private record Access(
             MethodHandle getPassengers,
+            MethodHandle getYRot,
             MethodHandle vecX,
             MethodHandle vecY,
             MethodHandle vecZ,
@@ -63,6 +71,12 @@ final class PassengerLogic {
                         "getPassengers",
                         MethodType.methodType(List.class)
                 ).asType(MethodType.methodType(List.class, Object.class));
+
+                MethodHandle getYRot = lookup.findVirtual(
+                        vehicleClass,
+                        "getYRot",
+                        MethodType.methodType(float.class)
+                ).asType(MethodType.methodType(float.class, Object.class));
 
                 Class<?> vec3 = Class.forName(
                         "net.minecraft.world.phys.Vec3",
@@ -81,7 +95,7 @@ final class PassengerLogic {
                         MethodType.methodType(void.class, double.class, double.class, double.class)
                 ).asType(MethodType.methodType(Object.class, double.class, double.class, double.class));
 
-                return new Access(getPassengers, vecX, vecY, vecZ, vecConstructor);
+                return new Access(getPassengers, getYRot, vecX, vecY, vecZ, vecConstructor);
             } catch (ReflectiveOperationException e) {
                 throw new IllegalStateException("Failed to initialize passenger access for " + vehicleClass.getName(), e);
             }
@@ -100,12 +114,20 @@ final class PassengerLogic {
             return passengers(vehicle).size();
         }
 
-        private Object offset(Object position, double xOffset) {
+        private Object offset(Object vehicle, Object position, double xOffset) {
             try {
+                double yaw = Math.toRadians(-((float) getYRot.invokeExact(vehicle)));
+                double sin = Math.sin(yaw);
+                double cos = Math.cos(yaw);
+
                 double x = (double) vecX.invokeExact(position);
                 double y = (double) vecY.invokeExact(position);
                 double z = (double) vecZ.invokeExact(position);
-                return vecConstructor.invokeExact(x + xOffset, y, z);
+
+                double rotatedX = xOffset * cos;
+                double rotatedZ = -xOffset * sin;
+
+                return vecConstructor.invokeExact(x + rotatedX, y, z + rotatedZ);
             } catch (Throwable e) {
                 throw new IllegalStateException("Failed to offset passenger position", e);
             }
