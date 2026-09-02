@@ -30,7 +30,6 @@ public final class PassengerLogic {
                 return true;
             }
         }
-
         return false;
     }
 
@@ -46,9 +45,7 @@ public final class PassengerLogic {
         try {
             MethodHandles.Lookup lookup = MethodHandles.publicLookup();
             MethodHandle secondaryUse = lookup.findVirtual(
-                    player.getClass(),
-                    "isSecondaryUseActive",
-                    MethodType.methodType(boolean.class)
+                    player.getClass(), "isSecondaryUseActive", MethodType.methodType(boolean.class)
             ).asType(MethodType.methodType(boolean.class, Object.class));
 
             if ((boolean) secondaryUse.invokeExact(player)) {
@@ -57,9 +54,7 @@ public final class PassengerLogic {
 
             Class<?> entity = Class.forName(ENTITY_CLASS, false, vehicle.getClass().getClassLoader());
             MethodHandle startRiding = lookup.findVirtual(
-                    player.getClass(),
-                    "startRiding",
-                    MethodType.methodType(boolean.class, entity)
+                    player.getClass(), "startRiding", MethodType.methodType(boolean.class, entity)
             ).asType(MethodType.methodType(boolean.class, Object.class, Object.class));
 
             if (!(boolean) startRiding.invokeExact(player, vehicle)) {
@@ -67,9 +62,7 @@ public final class PassengerLogic {
             }
 
             Class<?> interactionResult = Class.forName(
-                    INTERACTION_RESULT_CLASS,
-                    false,
-                    vehicle.getClass().getClassLoader()
+                    INTERACTION_RESULT_CLASS, false, vehicle.getClass().getClassLoader()
             );
             return lookup.findStaticGetter(interactionResult, "SUCCESS", interactionResult).invoke();
         } catch (Throwable e) {
@@ -83,7 +76,6 @@ public final class PassengerLogic {
                 return true;
             }
         }
-
         return false;
     }
 
@@ -104,14 +96,13 @@ public final class PassengerLogic {
             Object position = passengerAccess[0].invokeExact(passenger);
             Object shifted = offset(vehicle, position, offset);
 
-            double x = (double) access(vehicle.getClass())[2].invokeExact(shifted);
-            double y = (double) access(vehicle.getClass())[3].invokeExact(shifted);
-            double z = (double) access(vehicle.getClass())[4].invokeExact(shifted);
+            MethodHandle[] vehicleAccess = access(vehicle.getClass());
+            double x = (double) vehicleAccess[2].invokeExact(shifted);
+            double y = (double) vehicleAccess[3].invokeExact(shifted);
+            double z = (double) vehicleAccess[4].invokeExact(shifted);
             passengerAccess[1].invokeExact(passenger, x, y, z);
         } catch (Throwable e) {
-            throw new IllegalStateException(
-                    "Failed to position passenger on " + vehicle.getClass().getName(), e
-            );
+            throw new IllegalStateException("Failed to position passenger on " + vehicle.getClass().getName(), e);
         }
     }
 
@@ -135,10 +126,7 @@ public final class PassengerLogic {
             double y = (double) access[3].invokeExact(position);
             double z = (double) access[4].invokeExact(position);
 
-            double rotatedX = xOffset * cos;
-            double rotatedZ = xOffset * sin;
-
-            return access[5].invokeExact(x + rotatedX, y, z + rotatedZ);
+            return access[5].invokeExact(x + xOffset * cos, y, z + xOffset * sin);
         } catch (Throwable e) {
             throw new IllegalStateException("Failed to offset passenger position", e);
         }
@@ -156,23 +144,13 @@ public final class PassengerLogic {
         try {
             MethodHandles.Lookup lookup = MethodHandles.publicLookup();
             MethodHandle getPassengers = lookup.findVirtual(
-                    vehicleClass,
-                    "getPassengers",
-                    MethodType.methodType(List.class)
+                    vehicleClass, "getPassengers", MethodType.methodType(List.class)
             ).asType(MethodType.methodType(List.class, Object.class));
-
             MethodHandle getYRot = lookup.findVirtual(
-                    vehicleClass,
-                    "getYRot",
-                    MethodType.methodType(float.class)
+                    vehicleClass, "getYRot", MethodType.methodType(float.class)
             ).asType(MethodType.methodType(float.class, Object.class));
 
-            Class<?> vec3 = Class.forName(
-                    "net.minecraft.world.phys.Vec3",
-                    false,
-                    vehicleClass.getClassLoader()
-            );
-
+            Class<?> vec3 = Class.forName("net.minecraft.world.phys.Vec3", false, vehicleClass.getClassLoader());
             MethodHandle vecX = lookup.findGetter(vec3, "x", double.class)
                     .asType(MethodType.methodType(double.class, Object.class));
             MethodHandle vecY = lookup.findGetter(vec3, "y", double.class)
@@ -180,18 +158,10 @@ public final class PassengerLogic {
             MethodHandle vecZ = lookup.findGetter(vec3, "z", double.class)
                     .asType(MethodType.methodType(double.class, Object.class));
             MethodHandle vecConstructor = lookup.findConstructor(
-                    vec3,
-                    MethodType.methodType(void.class, double.class, double.class, double.class)
+                    vec3, MethodType.methodType(void.class, double.class, double.class, double.class)
             ).asType(MethodType.methodType(Object.class, double.class, double.class, double.class));
 
-            return new MethodHandle[]{
-                    getPassengers,
-                    getYRot,
-                    vecX,
-                    vecY,
-                    vecZ,
-                    vecConstructor
-            };
+            return new MethodHandle[]{getPassengers, getYRot, vecX, vecY, vecZ, vecConstructor};
         } catch (ReflectiveOperationException e) {
             throw new IllegalStateException("Failed to initialize passenger access for " + vehicleClass.getName(), e);
         }
@@ -200,29 +170,18 @@ public final class PassengerLogic {
     private static MethodHandle[] createPassengerAccess(Class<?> passengerClass) {
         try {
             MethodHandles.Lookup lookup = MethodHandles.publicLookup();
-            Class<?> vec3 = Class.forName(
-                    "net.minecraft.world.phys.Vec3",
-                    false,
-                    passengerClass.getClassLoader()
-            );
+            Class<?> vec3 = Class.forName("net.minecraft.world.phys.Vec3", false, passengerClass.getClassLoader());
 
             MethodHandle getPosition = lookup.findVirtual(
-                    passengerClass,
-                    "getPosition",
-                    MethodType.methodType(vec3)
+                    passengerClass, "position", MethodType.methodType(vec3)
             ).asType(MethodType.methodType(Object.class, Object.class));
-
             MethodHandle setPos = lookup.findVirtual(
-                    passengerClass,
-                    "setPos",
-                    MethodType.methodType(void.class, double.class, double.class, double.class)
+                    passengerClass, "setPos", MethodType.methodType(void.class, double.class, double.class, double.class)
             ).asType(MethodType.methodType(void.class, Object.class, double.class, double.class, double.class));
 
             return new MethodHandle[]{getPosition, setPos};
         } catch (ReflectiveOperationException e) {
-            throw new IllegalStateException(
-                    "Failed to initialize passenger access for " + passengerClass.getName(), e
-            );
+            throw new IllegalStateException("Failed to initialize passenger access for " + passengerClass.getName(), e);
         }
     }
 }
