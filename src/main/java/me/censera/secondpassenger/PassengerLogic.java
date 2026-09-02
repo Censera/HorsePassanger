@@ -79,39 +79,30 @@ public final class PassengerLogic {
         return false;
     }
 
-    public static void positionRider(Object vehicle, Object passenger) {
-        if (!isHorseLike(vehicle)) {
-            return;
+    public static Object passengerAttachmentPoint(Object vehicle, Object passenger, Object original) {
+        if (!isHorseLike(vehicle) || original == null) {
+            return original;
         }
 
         List<Object> passengers = passengers(vehicle);
         int index = passengers.indexOf(passenger);
-        if (index < 0 || index > 1) {
-            return;
+        if (index < 0 || index > 1 || passengers.size() < 2) {
+            return original;
         }
 
         try {
             MethodHandle[] passengerAccess = passengerAccess(passenger.getClass());
-            Object position = passengerAccess[0].invokeExact(passenger);
-
             double passengerWidth = (double) passengerAccess[2].invokeExact(passenger);
-            double otherPassengerWidth = passengerWidth;
-            if (passengers.size() > 1) {
-                Object otherPassenger = passengers.get(index == 0 ? 1 : 0);
-                MethodHandle[] otherAccess = passengerAccess(otherPassenger.getClass());
-                otherPassengerWidth = (double) otherAccess[2].invokeExact(otherPassenger);
-            }
+
+            Object otherPassenger = passengers.get(index == 0 ? 1 : 0);
+            MethodHandle[] otherAccess = passengerAccess(otherPassenger.getClass());
+            double otherPassengerWidth = (double) otherAccess[2].invokeExact(otherPassenger);
 
             double gap = ((passengerWidth + otherPassengerWidth) * 0.5D) * SPACE_FACTOR;
             double centerDistance = (passengerWidth * 0.5D) + gap + (otherPassengerWidth * 0.5D);
             double offset = index == 0 ? -centerDistance * 0.5D : centerDistance * 0.5D;
-            Object shifted = offset(vehicle, position, offset);
 
-            MethodHandle[] vehicleAccess = access(vehicle.getClass());
-            double x = (double) vehicleAccess[2].invokeExact(shifted);
-            double y = (double) vehicleAccess[3].invokeExact(shifted);
-            double z = (double) vehicleAccess[4].invokeExact(shifted);
-            passengerAccess[1].invokeExact(passenger, x, y, z);
+            return offset(vehicle, original, offset);
         } catch (Throwable e) {
             throw new IllegalStateException("Failed to position passenger on " + vehicle.getClass().getName(), e);
         }
