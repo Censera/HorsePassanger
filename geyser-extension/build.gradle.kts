@@ -24,6 +24,4 @@ tasks.withType<JavaCompile>().configureEach {
 
 tasks.jar {
     archiveBaseName = "second-passenger-geyser"
-
-    from("src/main/resources")
 }
