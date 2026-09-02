@@ -3,7 +3,11 @@ package me.censera.secondpassenger;
 import net.bytebuddy.agent.builder.AgentBuilder;
 import net.bytebuddy.asm.Advice;
 
+import java.io.IOException;
 import java.lang.instrument.Instrumentation;
+import java.net.URISyntaxException;
+import java.nio.file.Path;
+import java.util.jar.JarFile;
 
 import static net.bytebuddy.matcher.ElementMatchers.named;
 import static net.bytebuddy.matcher.ElementMatchers.takesArguments;
@@ -13,7 +17,7 @@ public final class Agent {
     }
 
     public static void premain(String arguments, Instrumentation instrumentation) {
-        System.setProperty("second-passenger.agent", "true");
+        appendToBootstrapClassLoader(instrumentation);
 
         new AgentBuilder.Default()
                 .disableClassFormatChanges()
@@ -27,6 +31,17 @@ public final class Agent {
                         .visit(Advice.to(PassengerPositionAdvice.class)
                                 .on(named("getPassengerAttachmentPoint").and(takesArguments(3)))))
                 .installOn(instrumentation);
+
+        System.setProperty("second-passenger.agent", "true");
+    }
+
+    private static void appendToBootstrapClassLoader(Instrumentation instrumentation) {
+        try {
+            Path agentJar = Path.of(Agent.class.getProtectionDomain().getCodeSource().getLocation().toURI());
+            instrumentation.appendToBootstrapClassLoaderSearch(new JarFile(agentJar.toFile()));
+        } catch (IOException | URISyntaxException e) {
+            throw new IllegalStateException("Failed to add second-passenger.jar to the bootstrap classloader", e);
+        }
     }
 
     public static class CanAddPassengerAdvice {
