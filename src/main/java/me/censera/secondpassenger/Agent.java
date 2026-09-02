@@ -34,6 +34,8 @@ public final class Agent {
                                 .on(named("canAddPassenger").and(takesArguments(1)))))
                 .type(named("net.minecraft.world.entity.animal.equine.AbstractHorse"))
                 .transform((builder, type, classLoader, module, protectionDomain) -> builder
+                        .visit(Advice.to(PassengerInteractAdvice.class)
+                                .on(named("mobInteract").and(takesArguments(2))))
                         .visit(Advice.to(PassengerPositionAdvice.class)
                                 .on(named("getPassengerAttachmentPoint").and(takesArguments(3)))))
                 .installOn(instrumentation);
@@ -73,6 +75,28 @@ public final class Agent {
         ) {
             if (PassengerLogic.isHorseLike(vehicle) && PassengerLogic.passengerCount(vehicle) < 2) {
                 result = true;
+            }
+        }
+    }
+
+    public static class PassengerInteractAdvice {
+        @Advice.OnMethodEnter(skipOn = Advice.OnNonDefaultValue.class)
+        static Object onEnter(
+                @Advice.This Object vehicle,
+                @Advice.Argument(0) Object player,
+                @Advice.Argument(1) Object hand
+        ) {
+            return PassengerLogic.additionalPassengerResult(vehicle, player, hand);
+        }
+
+        @Advice.OnMethodExit
+        static void onExit(
+                @Advice.Enter Object result,
+                @Advice.Return(readOnly = false, typing = net.bytebuddy.implementation.bytecode.assign.Assigner.Typing.DYNAMIC)
+                Object original
+        ) {
+            if (result != null) {
+                original = result;
             }
         }
     }
