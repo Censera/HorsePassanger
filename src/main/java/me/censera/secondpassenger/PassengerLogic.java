@@ -20,6 +20,7 @@ public final class PassengerLogic {
     private static final String VEC3_CLASS = "net.minecraft.world.phys.Vec3";
 
     private static final double PASSENGER_OFFSET = 0.6D;
+    private static final boolean DEBUG_ATTACHMENT = Boolean.getBoolean("second-passenger.debug-attachment");
 
     private static final Map<Class<?>, MethodHandle[]> ACCESS = new HashMap<>();
     private static final Map<Class<?>, MethodHandle[]> PASSENGER_ACCESS = new HashMap<>();
@@ -169,7 +170,21 @@ public final class PassengerLogic {
             float yaw = (float) vehicleAccess[1].invokeExact(vehicle);
             Object localOffset = constructor.invoke(offset, 0.0D, 0.0D);
             Object rotatedOffset = yRot.invoke(localOffset, -yaw * (float) (Math.PI / 180.0));
-            return add.invoke(original, rotatedOffset);
+            Object result = add.invoke(original, rotatedOffset);
+
+            if (DEBUG_ATTACHMENT) {
+                System.out.println("[SecondPassenger][attachment] vehicle=" + vehicle.getClass().getName()
+                        + " passenger=" + passengerId
+                        + " seat=" + seat
+                        + " passengers=" + passengers.size()
+                        + " original=" + original
+                        + " yaw=" + yaw
+                        + " offset=" + offset
+                        + " rotatedOffset=" + rotatedOffset
+                        + " result=" + result);
+            }
+
+            return result;
         } catch (Throwable e) {
             throw new IllegalStateException("Failed to calculate passenger attachment point for "
                     + vehicle.getClass().getName(), e);
