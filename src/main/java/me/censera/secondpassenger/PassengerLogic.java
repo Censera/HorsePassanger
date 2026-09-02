@@ -12,6 +12,7 @@ public final class PassengerLogic {
     private static final String ENTITY_CLASS = "net.minecraft.world.entity.Entity";
     private static final String INTERACTION_RESULT_CLASS = "net.minecraft.world.InteractionResult";
     private static final double SPACE_FACTOR = 0.75D;
+    private static final double MINIMUM_CENTER_DISTANCE = 1.2D;
 
     private static final ConcurrentHashMap<Class<?>, MethodHandle[]> ACCESS = new ConcurrentHashMap<>();
     private static final ConcurrentHashMap<Class<?>, MethodHandle[]> PASSENGER_ACCESS = new ConcurrentHashMap<>();
@@ -100,8 +101,9 @@ public final class PassengerLogic {
 
             double gap = ((passengerWidth + otherPassengerWidth) * 0.5D) * SPACE_FACTOR;
             double centerDistance = (passengerWidth * 0.5D) + gap + (otherPassengerWidth * 0.5D);
-            double offset = index == 0 ? -centerDistance * 0.5D : centerDistance * 0.5D;
+            centerDistance = Math.max(centerDistance, MINIMUM_CENTER_DISTANCE);
 
+            double offset = index == 0 ? -centerDistance * 0.5D : centerDistance * 0.5D;
             return offset(vehicle, original, offset);
         } catch (Throwable e) {
             throw new IllegalStateException("Failed to position passenger on " + vehicle.getClass().getName(), e);
