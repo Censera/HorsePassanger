@@ -11,6 +11,7 @@ public final class PassengerLogic {
     private static final String PLAYER_CLASS = "net.minecraft.world.entity.player.Player";
     private static final String ENTITY_CLASS = "net.minecraft.world.entity.Entity";
     private static final String INTERACTION_RESULT_CLASS = "net.minecraft.world.InteractionResult";
+    private static final String INTERACTION_SUCCESS_CLASS = "net.minecraft.world.InteractionResult$Success";
 
     private static final double SPACE_FACTOR = 0.75D;
     private static final double MINIMUM_CENTER_DISTANCE = 1.2D;
@@ -66,7 +67,12 @@ public final class PassengerLogic {
             Class<?> interactionResult = Class.forName(
                     INTERACTION_RESULT_CLASS, false, vehicle.getClass().getClassLoader()
             );
-            return lookup.findStaticGetter(interactionResult, "SUCCESS_SERVER", interactionResult).invoke();
+            Class<?> interactionSuccess = Class.forName(
+                    INTERACTION_SUCCESS_CLASS, false, vehicle.getClass().getClassLoader()
+            );
+            return lookup.findStaticGetter(interactionResult, "SUCCESS_SERVER", interactionSuccess)
+                    .asType(MethodType.methodType(Object.class))
+                    .invoke();
         } catch (Throwable e) {
             throw new IllegalStateException("Failed to add a second passenger to " + vehicle.getClass().getName(), e);
         }
