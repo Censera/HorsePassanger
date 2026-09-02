@@ -103,17 +103,19 @@ public final class PassengerLogic {
     private static boolean canRideSecondPassenger(Object vehicle, Object player) {
         try {
             Object bukkitHorse = vehicle.getClass().getMethod("getBukkitEntity").invoke(vehicle);
-            Method isTamed = bukkitHorse.getClass().getMethod("isTamed");
-            if (!(boolean) isTamed.invoke(bukkitHorse)) {
+            if (!(boolean) bukkitHorse.getClass().getMethod("isTamed").invoke(bukkitHorse)) {
                 return true;
             }
 
-            UUID owner = (UUID) bukkitHorse.getClass().getMethod("getOwnerUniqueId").invoke(bukkitHorse);
-            UUID playerId = (UUID) player.getClass().getMethod("getBukkitEntity").invoke(player)
-                    .getClass().getMethod("getUniqueId").invoke(
-                            player.getClass().getMethod("getBukkitEntity").invoke(player)
-                    );
-            return owner != null && owner.equals(playerId);
+            Object owner = bukkitHorse.getClass().getMethod("getOwner").invoke(bukkitHorse);
+            if (owner == null) {
+                return false;
+            }
+
+            Object bukkitPlayer = player.getClass().getMethod("getBukkitEntity").invoke(player);
+            UUID ownerId = (UUID) owner.getClass().getMethod("getUniqueId").invoke(owner);
+            UUID playerId = (UUID) bukkitPlayer.getClass().getMethod("getUniqueId").invoke(bukkitPlayer);
+            return ownerId.equals(playerId);
         } catch (ReflectiveOperationException e) {
             throw new IllegalStateException("Failed to check horse ownership for " + vehicle.getClass().getName(), e);
         }
@@ -153,11 +155,6 @@ public final class PassengerLogic {
         return false;
     }
 
-    /**
-     * Runs after vanilla AbstractHorse.positionRider has placed the passenger.
-     * The passenger remains a real server-side passenger, but its stored world
-     * position is moved sideways along the horse's local X axis.
-     */
     public static void positionRider(Object vehicle, Object passenger) {
         if (!isHorseLike(vehicle)) {
             return;
