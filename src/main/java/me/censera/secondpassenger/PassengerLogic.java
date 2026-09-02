@@ -14,6 +14,7 @@ public final class PassengerLogic {
     private static final double SEAT_OFFSET = 0.4D;
 
     private static final ConcurrentHashMap<Class<?>, MethodHandle[]> ACCESS = new ConcurrentHashMap<>();
+    private static final ConcurrentHashMap<Class<?>, MethodHandle[]> PASSENGER_ACCESS = new ConcurrentHashMap<>();
     private static final ConcurrentHashMap<Class<?>, Boolean> HORSE_LIKE = new ConcurrentHashMap<>();
 
     private PassengerLogic() {
@@ -86,19 +87,32 @@ public final class PassengerLogic {
         return false;
     }
 
-    public static Object position(Object vehicle, Object passenger, Object position) {
-        if (!isHorseLike(vehicle) || position == null) {
-            return position;
+    public static void positionRider(Object vehicle, Object passenger) {
+        if (!isHorseLike(vehicle)) {
+            return;
         }
 
         List<Object> passengers = passengers(vehicle);
         int index = passengers.indexOf(passenger);
         if (index < 0 || index > 1) {
-            return position;
+            return;
         }
 
         double offset = index == 0 ? -SEAT_OFFSET : SEAT_OFFSET;
-        return offset(vehicle, position, offset);
+        try {
+            MethodHandle[] passengerAccess = passengerAccess(passenger.getClass());
+            Object position = passengerAccess[0].invokeExact(passenger);
+            Object shifted = offset(vehicle, position, offset);
+
+            double x = (double) access(vehicle.getClass())[2].invokeExact(shifted);
+            double y = (double) access(vehicle.getClass())[3].invokeExact(shifted);
+            double z = (double) access(vehicle.getClass())[4].invokeExact(shifted);
+            passengerAccess[1].invokeExact(passenger, x, y, z);
+        } catch (Throwable e) {
+            throw new IllegalStateException(
+                    "Failed to position passenger on " + vehicle.getClass().getName(), e
+            );
+        }
     }
 
     @SuppressWarnings("unchecked")
@@ -132,6 +146,10 @@ public final class PassengerLogic {
 
     private static MethodHandle[] access(Class<?> vehicleClass) {
         return ACCESS.computeIfAbsent(vehicleClass, PassengerLogic::createAccess);
+    }
+
+    private static MethodHandle[] passengerAccess(Class<?> passengerClass) {
+        return PASSENGER_ACCESS.computeIfAbsent(passengerClass, PassengerLogic::createPassengerAccess);
     }
 
     private static MethodHandle[] createAccess(Class<?> vehicleClass) {
@@ -176,6 +194,35 @@ public final class PassengerLogic {
             };
         } catch (ReflectiveOperationException e) {
             throw new IllegalStateException("Failed to initialize passenger access for " + vehicleClass.getName(), e);
+        }
+    }
+
+    private static MethodHandle[] createPassengerAccess(Class<?> passengerClass) {
+        try {
+            MethodHandles.Lookup lookup = MethodHandles.publicLookup();
+            Class<?> vec3 = Class.forName(
+                    "net.minecraft.world.phys.Vec3",
+                    false,
+                    passengerClass.getClassLoader()
+            );
+
+            MethodHandle getPosition = lookup.findVirtual(
+                    passengerClass,
+                    "getPosition",
+                    MethodType.methodType(vec3)
+            ).asType(MethodType.methodType(Object.class, Object.class));
+
+            MethodHandle setPos = lookup.findVirtual(
+                    passengerClass,
+                    "setPos",
+                    MethodType.methodType(void.class, double.class, double.class, double.class)
+            ).asType(MethodType.methodType(void.class, Object.class, double.class, double.class, double.class));
+
+            return new MethodHandle[]{getPosition, setPos};
+        } catch (ReflectiveOperationException e) {
+            throw new IllegalStateException(
+                    "Failed to initialize passenger access for " + passengerClass.getName(), e
+            );
         }
     }
 }
