@@ -4,20 +4,25 @@ import net.bytebuddy.agent.builder.AgentBuilder;
 import net.bytebuddy.asm.Advice;
 
 import java.io.IOException;
+import java.io.InputStream;
 import java.lang.instrument.Instrumentation;
-import java.net.URISyntaxException;
+import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.jar.JarEntry;
 import java.util.jar.JarFile;
+import java.util.jar.JarOutputStream;
 
 import static net.bytebuddy.matcher.ElementMatchers.named;
 import static net.bytebuddy.matcher.ElementMatchers.takesArguments;
 
 public final class Agent {
+    private static JarFile bootstrapJar;
+
     private Agent() {
     }
 
     public static void premain(String arguments, Instrumentation instrumentation) {
-        appendToBootstrapClassLoader(instrumentation);
+        appendPassengerLogicToBootstrap(instrumentation);
 
         new AgentBuilder.Default()
                 .disableClassFormatChanges()
@@ -35,12 +40,27 @@ public final class Agent {
         System.setProperty("second-passenger.agent", "true");
     }
 
-    private static void appendToBootstrapClassLoader(Instrumentation instrumentation) {
+    private static void appendPassengerLogicToBootstrap(Instrumentation instrumentation) {
         try {
-            Path agentJar = Path.of(Agent.class.getProtectionDomain().getCodeSource().getLocation().toURI());
-            instrumentation.appendToBootstrapClassLoaderSearch(new JarFile(agentJar.toFile()));
-        } catch (IOException | URISyntaxException e) {
-            throw new IllegalStateException("Failed to add second-passenger.jar to the bootstrap classloader", e);
+            Path jar = Files.createTempFile("second-passenger-bootstrap-", ".jar");
+            jar.toFile().deleteOnExit();
+
+            try (InputStream input = Agent.class.getClassLoader().getResourceAsStream(
+                    "me/censera/secondpassenger/PassengerLogic.class");
+                 JarOutputStream output = new JarOutputStream(Files.newOutputStream(jar))) {
+                if (input == null) {
+                    throw new IllegalStateException("PassengerLogic.class is missing from the agent JAR");
+                }
+
+                output.putNextEntry(new JarEntry("me/censera/secondpassenger/PassengerLogic.class"));
+                input.transferTo(output);
+                output.closeEntry();
+            }
+
+            bootstrapJar = new JarFile(jar.toFile());
+            instrumentation.appendToBootstrapClassLoaderSearch(bootstrapJar);
+        } catch (IOException e) {
+            throw new IllegalStateException("Failed to add PassengerLogic to the bootstrap classloader", e);
         }
     }
 
